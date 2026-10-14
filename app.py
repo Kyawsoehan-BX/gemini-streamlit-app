@@ -66,7 +66,7 @@ if not api_key:
     st.stop()
 
 # Vertex AI mode ဖြင့် ချိတ်ဆက်ခြင်း
-client = genai.Client(
+client = genai.Client(api_key=api_key)
     vertexai=True,
     project="786352932421",  # သင့် project ID သို့မဟုတ် project number
     location="us-central1"
