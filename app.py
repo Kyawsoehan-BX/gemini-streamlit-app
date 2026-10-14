@@ -65,11 +65,8 @@ if not api_key:
     st.info("👈 Please enter your Gemini API Key in the sidebar to get started.")
     st.stop()
 
-# Vertex AI mode ဖြင့် ချိတ်ဆက်ခြင်း
+# API Client ချိတ်ဆက်ခြင်း
 client = genai.Client(api_key=api_key)
-    vertexai=True,
-    project="786352932421",  # သင့် project ID သို့မဟုတ် project number
-    location="us-central1"
 
 # --- ပင်မ Chat UI ---
 st.title("⚡ AI Multimodal Studio")
@@ -97,7 +94,6 @@ chat_query = st.chat_input(
 )
 
 if chat_query is not None:
-    # Dictionary သို့မဟုတ် Object ပုံစံ နှစ်မျိုးစလုံးကို အဆင်ပြေအောင် ဖတ်ယူခြင်း
     if isinstance(chat_query, dict):
         user_text = chat_query.get("text", "") or ""
         user_files = chat_query.get("files", []) or []
@@ -105,7 +101,6 @@ if chat_query is not None:
         user_text = getattr(chat_query, "text", "") or ""
         user_files = getattr(chat_query, "files", []) or []
 
-    # စာရိုက်ထားလျှင် သို့မဟုတ် ဖိုင်တင်ထားလျှင်
     if user_text.strip() or len(user_files) > 0:
         file_preview = None
         file_type = None
@@ -135,7 +130,6 @@ if chat_query is not None:
 
         display_text = user_text if user_text.strip() else "(Attachment Sent)"
 
-        # ၁။ User message ပြသခြင်း
         st.session_state.messages.append({
             "role": "user",
             "content": display_text,
@@ -151,12 +145,11 @@ if chat_query is not None:
                     st.video(file_preview)
             st.markdown(display_text)
 
-        # ၂။ AI အဖြေရယူခြင်း
         with st.chat_message("assistant", avatar=BOT_AVATAR):
             with st.spinner(spinner_text):
                 try:
                     response = client.models.generate_content(
-                        model="gemini-3.8-flash",
+                        model="gemini-2.5-flash",
                         contents=contents_payload,
                         config=types.GenerateContentConfig(
                             system_instruction=system_prompts[bot_role]
