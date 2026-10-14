@@ -65,15 +65,11 @@ if not api_key:
     st.info("👈 Please enter your Gemini API Key in the sidebar to get started.")
     st.stop()
 
-# API Client ချိတ်ဆက်ခြင်း
+# Vertex AI mode ဖြင့် ချိတ်ဆက်ခြင်း
 client = genai.Client(
-    api_key=api_key,
-    http_options={
-        'headers': {
-            'X-Goog-Api-Key': api_key
-        }
-    }
-)
+    vertexai=True,
+    project="786352932421",  # သင့် project ID သို့မဟုတ် project number
+    location="us-central1"
 
 # --- ပင်မ Chat UI ---
 st.title("⚡ AI Multimodal Studio")
