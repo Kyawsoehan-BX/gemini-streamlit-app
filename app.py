@@ -72,16 +72,10 @@ client = genai.Client(api_key=api_key)
 st.title("⚡ AI Multimodal Studio")
 st.caption(f"Role: **{bot_role}** | Language: **{lang}**")
 
-# File Uploader (Streamlit standard ပုံစံဖြင့် ထည့်သွင်းခြင်း)
-uploaded_file = st.file_uploader(
-    "📎 Attach Image or Video (Optional)", 
-    type=["jpg", "jpeg", "png", "webp", "mp4"]
-)
-
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# စကားပြောမှတ်တမ်း ပြန်လည်ပြသခြင်း
+# ရှိပြီးသား Messages များ ပြသခြင်း
 for msg in st.session_state.messages:
     avatar_icon = USER_AVATAR if msg["role"] == "user" else BOT_AVATAR
     with st.chat_message(msg["role"], avatar=avatar_icon):
@@ -92,15 +86,29 @@ for msg in st.session_state.messages:
                 st.video(msg["file_preview"])
         st.markdown(msg["content"])
 
-# ပင်မ Chat Input
+# File Uploader Section
+uploaded_file = st.file_uploader(
+    "📎 Attach Image or Video", 
+    type=["jpg", "jpeg", "png", "webp", "mp4"]
+)
+
+# Upload တင်ထားသော ပုံ/ဗီဒီယိုအတွက် တိုက်ရိုက် Analyze ခလုတ်
+if uploaded_file is not None:
+    col1, col2 = st.columns([1, 4])
+    with col1:
+        analyze_btn = st.button("🚀 Analyze Uploaded File", use_container_width=True)
+else:
+    analyze_btn = False
+
 user_text = st.chat_input(placeholder=input_placeholder)
 
-if user_text:
+# အသုံးပြုသူ စာရိုက်ပို့လိုက်လျှင် သို့မဟုတ် Analyze ခလုတ်နှိပ်လျှင် အလုပ်လုပ်မည်
+if user_text or analyze_btn:
+    prompt_text = user_text if user_text else ("ဒီပုံ/ဗီဒီယိုကို အသေးစိတ် သုံးသပ်ပြပါ။" if lang == "မြန်မာ" else "Analyze this image/video in detail.")
     file_preview = None
     file_type = None
     contents_payload = []
 
-    # ဖိုင်ပါလာပါက ကိုင်တွယ်ခြင်း
     if uploaded_file is not None:
         if uploaded_file.type.startswith("image"):
             file_type = "image"
@@ -116,12 +124,12 @@ if user_text:
             video_file_obj = client.files.upload(file=tmp_path)
             contents_payload.append(video_file_obj)
 
-    contents_payload.append(user_text)
+    contents_payload.append(prompt_text)
 
-    # ၁။ User မက်ဆေ့ခ်ျနှင့် ပုံ/ဗီဒီယိုကို ပြသခြင်း
+    # User message ပြသခြင်း
     st.session_state.messages.append({
         "role": "user",
-        "content": user_text,
+        "content": prompt_text,
         "file_preview": file_preview,
         "file_type": file_type
     })
@@ -132,9 +140,9 @@ if user_text:
                 st.image(file_preview, width=300)
             elif file_type == "video":
                 st.video(file_preview)
-        st.markdown(user_text)
+        st.markdown(prompt_text)
 
-    # ၂။ AI ဆီမှ အဖြေထုတ်ယူခြင်း
+    # Gemini AI ထံမှ အဖြေရယူခြင်း
     with st.chat_message("assistant", avatar=BOT_AVATAR):
         with st.spinner(spinner_text):
             try:
@@ -148,7 +156,6 @@ if user_text:
                 ai_reply = response.text
                 st.markdown(ai_reply)
 
-                # ၃။ AI အဖြေကို သိမ်းဆည်းခြင်း
                 st.session_state.messages.append({
                     "role": "assistant",
                     "content": ai_reply,
