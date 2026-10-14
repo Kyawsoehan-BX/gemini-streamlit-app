@@ -93,10 +93,16 @@ chat_query = st.chat_input(
     file_type=["jpg", "jpeg", "png", "webp", "mp4"]
 )
 
-if chat_query:
-    user_text = chat_query.text if hasattr(chat_query, "text") and chat_query.text else ""
-    user_files = chat_query.files if hasattr(chat_query, "files") and chat_query.files else []
+if chat_query is not None:
+    # Dictionary သို့မဟုတ် Object ပုံစံ နှစ်မျိုးစလုံးကို အဆင်ပြေအောင် ဖတ်ယူခြင်း
+    if isinstance(chat_query, dict):
+        user_text = chat_query.get("text", "") or ""
+        user_files = chat_query.get("files", []) or []
+    else:
+        user_text = getattr(chat_query, "text", "") or ""
+        user_files = getattr(chat_query, "files", []) or []
 
+    # စာရိုက်ထားလျှင် သို့မဟုတ် ဖိုင်တင်ထားလျှင်
     if user_text.strip() or len(user_files) > 0:
         file_preview = None
         file_type = None
@@ -108,3 +114,59 @@ if chat_query:
                 file_type = "image"
                 img = Image.open(uploaded_file)
                 file_preview = img
+                contents_payload.append(img)
+            elif "video" in uploaded_file.type:
+                file_type = "video"
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                    tmp_file.write(uploaded_file.read())
+                    tmp_path = tmp_file.name
+                file_preview = tmp_path
+                video_file_obj = client.files.upload(file=tmp_path)
+                contents_payload.append(video_file_obj)
+
+        if user_text.strip():
+            contents_payload.append(user_text)
+        else:
+            fallback_prompt = "ဒီပုံ/ဗီဒီယိုထဲမှာ ဘာတွေပါလဲ၊ အသေးစိတ် သုံးသပ်ပြပါ။" if lang == "မြန်မာ" else "Analyze this image/video in detail."
+            contents_payload.append(fallback_prompt)
+
+        display_text = user_text if user_text.strip() else "(Attachment Sent)"
+
+        # ၁။ User message ပြသခြင်း
+        st.session_state.messages.append({
+            "role": "user",
+            "content": display_text,
+            "file_preview": file_preview,
+            "file_type": file_type
+        })
+
+        with st.chat_message("user", avatar=USER_AVATAR):
+            if file_preview:
+                if file_type == "image":
+                    st.image(file_preview, width=300)
+                elif file_type == "video":
+                    st.video(file_preview)
+            st.markdown(display_text)
+
+        # ၂။ AI အဖြေရယူခြင်း
+        with st.chat_message("assistant", avatar=BOT_AVATAR):
+            with st.spinner(spinner_text):
+                try:
+                    response = client.models.generate_content(
+                        model="gemini-3.8-flash",
+                        contents=contents_payload,
+                        config=types.GenerateContentConfig(
+                            system_instruction=system_prompts[bot_role]
+                        )
+                    )
+                    ai_reply = response.text
+                    st.markdown(ai_reply)
+
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": ai_reply,
+                        "file_preview": None,
+                        "file_type": None
+                    })
+                except Exception as e:
+                    st.error(f"Error: {e}")
