@@ -68,7 +68,11 @@ if not api_key:
 # API Client ချိတ်ဆက်ခြင်း
 client = genai.Client(
     api_key=api_key,
-    http_options={'api_version': 'v1alpha'}
+    http_options={
+        'headers': {
+            'X-Goog-Api-Key': api_key
+        }
+    }
 )
 
 # --- ပင်မ Chat UI ---
