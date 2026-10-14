@@ -66,7 +66,10 @@ if not api_key:
     st.stop()
 
 # API Client ချိတ်ဆက်ခြင်း
-client = genai.Client(api_key=api_key)
+client = genai.Client(
+    api_key=api_key,
+    http_options={'api_version': 'v1alpha'}
+)
 
 # --- ပင်မ Chat UI ---
 st.title("⚡ AI Multimodal Studio")
