@@ -1,15 +1,12 @@
-%%writefile app.py
+import os
+import tempfile
+from PIL import Image
 import streamlit as st
 from google import genai
 from google.genai import types
-from PIL import Image
-import tempfile
 
 # Page Setup
 st.set_page_config(page_title="K AI Chat Studio", page_icon="⚡", layout="wide")
-
-# API Client ချိတ်ဆက်ခြင်း
-client = genai.Client(api_key="Enter Gemini API Key", type="password"")
 
 # Avatar Icons
 USER_AVATAR = "https://cdn-icons-png.flaticon.com/512/3177/3177440.png"
@@ -19,6 +16,13 @@ BOT_AVATAR = "https://cdn-icons-png.flaticon.com/512/4712/4712035.png"
 with st.sidebar:
     st.image(BOT_AVATAR, width=70)
     st.title("Settings")
+
+    # API Key စစ်ဆေးခြင်း
+    api_key_env = os.environ.get("GEMINI_API_KEY")
+    if api_key_env:
+        api_key = api_key_env
+    else:
+        api_key = st.text_input("Enter Gemini API Key", type="password")
 
     lang = st.radio("🌐 Language / ဘာသာစကား", ["မြန်မာ", "English"])
 
@@ -56,9 +60,23 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
+# API Key မရှိသေးပါက ရပ်တန့်ထားမည်
+if not api_key:
+    st.info("👈 Please enter your Gemini API Key in the sidebar to get started.")
+    st.stop()
+
+# API Client ချိတ်ဆက်ခြင်း
+client = genai.Client(api_key=api_key)
+
 # --- ပင်မ Chat UI ---
 st.title("⚡ AI Multimodal Studio")
 st.caption(f"Role: **{bot_role}** | Language: **{lang}**")
+
+# File Uploader (Streamlit standard ပုံစံဖြင့် ထည့်သွင်းခြင်း)
+uploaded_file = st.file_uploader(
+    "📎 Attach Image or Video (Optional)", 
+    type=["jpg", "jpeg", "png", "webp", "mp4"]
+)
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -67,76 +85,61 @@ if "messages" not in st.session_state:
 for msg in st.session_state.messages:
     avatar_icon = USER_AVATAR if msg["role"] == "user" else BOT_AVATAR
     with st.chat_message(msg["role"], avatar=avatar_icon):
-        if "file_preview" in msg and msg["file_preview"]:
+        if msg.get("file_preview"):
             if msg["file_type"] == "image":
                 st.image(msg["file_preview"], width=300)
             elif msg["file_type"] == "video":
                 st.video(msg["file_preview"])
         st.markdown(msg["content"])
 
-# Text Bar ပေါ်တွင် 📎 Attachment icon ထည့်သွင်းထားသော chat_input
-chat_query = st.chat_input(
-    placeholder=input_placeholder,
-    accept_file=True,
-    file_type=["jpg", "jpeg", "png", "webp", "mp4", "mov"]
-)
+# ပင်မ Chat Input
+user_text = st.chat_input(placeholder=input_placeholder)
 
-if chat_query:
-    user_text = chat_query.text if chat_query.text else ""
-    user_files = chat_query.files if chat_query.files else []
+if user_text:
+    file_preview = None
+    file_type = None
+    contents_payload = []
 
-    # Text သို့မဟုတ် File တစ်ခုခုပါမှ စတင်အလုပ်လုပ်ခြင်း
-    if user_text.strip() or len(user_files) > 0:
-        file_preview = None
-        file_type = None
-        contents_payload = []
+    # ဖိုင်ပါလာပါက ကိုင်တွယ်ခြင်း
+    if uploaded_file is not None:
+        if uploaded_file.type.startswith("image"):
+            file_type = "image"
+            img = Image.open(uploaded_file)
+            file_preview = img
+            contents_payload.append(img)
+        elif uploaded_file.type.startswith("video"):
+            file_type = "video"
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
+                tmp_file.write(uploaded_file.read())
+                tmp_path = tmp_file.name
+            file_preview = tmp_path
+            video_file_obj = client.files.upload(file=tmp_path)
+            contents_payload.append(video_file_obj)
 
-        # File ပါလာပါက ကိုင်တွယ်ခြင်း
-        if len(user_files) > 0:
-            uploaded_file = user_files[0]
-            if "image" in uploaded_file.type:
-                file_type = "image"
-                img = Image.open(uploaded_file)
-                file_preview = img
-                contents_payload.append(img)
-            elif "video" in uploaded_file.type:
-                file_type = "video"
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp_file:
-                    tmp_file.write(uploaded_file.read())
-                    tmp_path = tmp_file.name
-                file_preview = tmp_path
-                video_file_obj = client.files.upload(file=tmp_path)
-                contents_payload.append(video_file_obj)
+    contents_payload.append(user_text)
 
-        if user_text.strip():
-            contents_payload.append(user_text)
-        else:
-            # File တင်ပြီး စာမရိုက်ထားပါက default မေးခွန်း ပို့ပေးခြင်း
-            fallback_prompt = "ဒီပုံ/ဗီဒီယိုထဲမှာ ဘာတွေပါလဲ၊ အသေးစိတ် သုံးသပ်ပြပါ။" if lang == "မြန်မာ" else "Analyze this image/video in detail."
-            contents_payload.append(fallback_prompt)
+    # ၁။ User မက်ဆေ့ခ်ျနှင့် ပုံ/ဗီဒီယိုကို ပြသခြင်း
+    st.session_state.messages.append({
+        "role": "user",
+        "content": user_text,
+        "file_preview": file_preview,
+        "file_type": file_type
+    })
 
-        # ၁။ User မက်ဆေ့ခ်ျနှင့် ပုံ/ဗီဒီယိုကို ပြသခြင်း
-        display_text = user_text if user_text.strip() else "(Attachment Sent)"
-        st.session_state.messages.append({
-            "role": "user",
-            "content": display_text,
-            "file_preview": file_preview,
-            "file_type": file_type
-        })
+    with st.chat_message("user", avatar=USER_AVATAR):
+        if file_preview:
+            if file_type == "image":
+                st.image(file_preview, width=300)
+            elif file_type == "video":
+                st.video(file_preview)
+        st.markdown(user_text)
 
-        with st.chat_message("user", avatar=USER_AVATAR):
-            if file_preview:
-                if file_type == "image":
-                    st.image(file_preview, width=300)
-                elif file_type == "video":
-                    st.video(file_preview)
-            st.markdown(display_text)
-
-        # ၂။ AI ဆီမှ အဖြေထုတ်ယူခြင်း
-        with st.chat_message("assistant", avatar=BOT_AVATAR):
-            with st.spinner(spinner_text):
+    # ၂။ AI ဆီမှ အဖြေထုတ်ယူခြင်း
+    with st.chat_message("assistant", avatar=BOT_AVATAR):
+        with st.spinner(spinner_text):
+            try:
                 response = client.models.generate_content(
-                    model="gemini-flash-lite-latest",
+                    model="gemini-2.5-flash",
                     contents=contents_payload,
                     config=types.GenerateContentConfig(
                         system_instruction=system_prompts[bot_role]
@@ -145,10 +148,12 @@ if chat_query:
                 ai_reply = response.text
                 st.markdown(ai_reply)
 
-        # ၃။ AI အဖြေကို သိမ်းဆည်းခြင်း
-        st.session_state.messages.append({
-            "role": "assistant",
-            "content": ai_reply,
-            "file_preview": None,
-            "file_type": None
-        })
+                # ၃။ AI အဖြေကို သိမ်းဆည်းခြင်း
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": ai_reply,
+                    "file_preview": None,
+                    "file_type": None
+                })
+            except Exception as e:
+                st.error(f"Error: {e}")
